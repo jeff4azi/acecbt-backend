@@ -1,5 +1,4 @@
 import express from 'express'
-import cors from 'cors'
 import dotenv from 'dotenv'
 
 import quizzesRouter from './src/routes/quizzes.js'
@@ -17,25 +16,40 @@ const app = express()
 
 const allowedOrigins = [
   'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
   'https://cbt.aceeduc.com',
+  'https://backend.aceeduc.com',
+  'http://backend.aceeduc.com',
 ]
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true)
-    } else {
-      callback(new Error('Not allowed by CORS'))
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  optionsSuccessStatus: 204,
-  preflightContinue: false,
-}
+const ALLOWED_METHODS = 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS'
+const ALLOWED_HEADERS = 'Content-Type,Authorization,Accept,Origin,X-Requested-With'
 
-app.use(cors(corsOptions))
+const isOriginAllowed = (origin) => !origin || allowedOrigins.includes(origin)
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+
+  if (isOriginAllowed(origin)) {
+    if (origin) res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('Access-Control-Allow-Methods', ALLOWED_METHODS)
+    res.setHeader('Access-Control-Allow-Headers', ALLOWED_HEADERS)
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    res.setHeader('Access-Control-Max-Age', '86400')
+  }
+
+  if (req.method === 'OPTIONS') {
+    if (!isOriginAllowed(origin)) {
+      return res.status(403).json({ error: 'Origin not allowed by CORS' })
+    }
+    return res.status(200).end()
+  }
+
+  next()
+})
 
 app.use(express.json())
 
