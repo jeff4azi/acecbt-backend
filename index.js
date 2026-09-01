@@ -61,8 +61,6 @@ app.get("/api/health", (req, res) => {
 });
 
 // GET /api/me — authenticated caller's user + profile info
-// Returns is_admin flag so the frontend knows which UI to render without
-// waiting for a 403 from an admin-only endpoint.
 app.get("/api/me", requireAuth, (req, res) => {
   res.json({
     id: req.user.id,
@@ -77,6 +75,34 @@ app.get("/api/me", requireAuth, (req, res) => {
       created_at: req.user.created_at,
     },
   });
+});
+
+// PATCH /api/me — update the authenticated user's own profile (name only)
+app.patch("/api/me", requireAuth, async (req, res) => {
+  const { full_name } = req.body;
+  if (!full_name || typeof full_name !== "string" || !full_name.trim()) {
+    return res.status(400).json({ error: "full_name is required" });
+  }
+  const trimmed = full_name.trim();
+
+  const { supabaseAdmin } = await import("./src/lib/supabaseAdmin.js");
+
+  // Update profiles table
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .update({ full_name: trimmed })
+    .eq("id", req.user.id)
+    .select("id, full_name, email, is_admin")
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Also keep auth.users metadata in sync so user_metadata.full_name stays accurate
+  await supabaseAdmin.auth.admin.updateUserById(req.user.id, {
+    user_metadata: { full_name: trimmed },
+  });
+
+  res.json(data);
 });
 
 app.use("/api/quizzes", quizzesRouter);
