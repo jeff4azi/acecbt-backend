@@ -15,7 +15,28 @@ dotenv.config()
 
 const app = express()
 
-app.use(cors())
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://cbt.aceeduc.com',
+]
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 204,
+  preflightContinue: false,
+}
+
+app.use(cors(corsOptions))
+
 app.use(express.json())
 
 app.get('/api/health', (req, res) => {
