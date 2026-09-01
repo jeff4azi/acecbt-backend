@@ -5,7 +5,9 @@ import { requireAuth, requireAdmin } from "../middleware/requireAuth.js";
 const router = Router();
 
 const ALLOWED_BUCKETS = ["ad-images", "question-images", "option-images"];
-const MAX_BYTES = 4 * 1024 * 1024; // 4 MB after compression (base64 adds ~33%)
+// Post-compression limit per spec: 250 KB max target. 1.5 MB gives generous headroom
+// for edge cases while still rejecting clearly oversized payloads.
+const MAX_BYTES = 1.5 * 1024 * 1024;
 
 // POST /api/upload/:bucket
 // Body: { base64: string, contentType: string, fileName: string }
@@ -35,7 +37,7 @@ router.post("/:bucket", requireAuth, requireAdmin, async (req, res) => {
 
   if (buffer.byteLength > MAX_BYTES) {
     return res.status(413).json({
-      error: `File too large after encoding (${Math.round(buffer.byteLength / 1024)} KB). Max ${MAX_BYTES / 1024} KB.`,
+      error: `Compressed image too large (${Math.round(buffer.byteLength / 1024)} KB). Max allowed is ${Math.round(MAX_BYTES / 1024)} KB.`,
     });
   }
 

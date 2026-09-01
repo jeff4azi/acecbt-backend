@@ -54,7 +54,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: "4mb" }));
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok", service: "ace-edu-cbt-api" });
