@@ -1,5 +1,6 @@
 import express from 'express'
 import dotenv from 'dotenv'
+import { requireAuth } from './src/middleware/requireAuth.js'
 
 import quizzesRouter from './src/routes/quizzes.js'
 import questionsRouter from './src/routes/questions.js'
@@ -55,6 +56,24 @@ app.use(express.json())
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', service: 'ace-edu-cbt-api' })
+})
+
+// GET /api/me — authenticated caller's user + profile info
+// Returns is_admin flag so the frontend knows which UI to render without
+// waiting for a 403 from an admin-only endpoint.
+app.get('/api/me', requireAuth, (req, res) => {
+  res.json({
+    id: req.user.id,
+    email: req.profile.email ?? req.user.email ?? null,
+    full_name: req.profile.full_name ?? req.user.user_metadata?.full_name ?? null,
+    is_admin: req.isAdmin,
+    profile: req.profile,
+    auth_user: {
+      id: req.user.id,
+      email: req.user.email,
+      created_at: req.user.created_at,
+    },
+  })
 })
 
 app.use('/api/quizzes', quizzesRouter)
