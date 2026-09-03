@@ -11,6 +11,7 @@ import settingsRouter from "./src/routes/settings.js";
 import dashboardRouter from "./src/routes/dashboard.js";
 import unlockedRouter from "./src/routes/unlocked.js";
 import uploadRouter from "./src/routes/upload.js";
+import usersRouter from "./src/routes/users.js";
 
 dotenv.config();
 
@@ -114,6 +115,7 @@ app.use("/api/settings", settingsRouter);
 app.use("/api/dashboard", dashboardRouter);
 app.use("/api/unlocked", unlockedRouter);
 app.use("/api/upload", uploadRouter);
+app.use("/api/users", usersRouter);
 
 // 404 fallback for unmatched API routes
 app.use("/api", (req, res) => {
