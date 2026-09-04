@@ -8,7 +8,8 @@ import {
 
 const router = Router();
 
-// GET /api/quizzes/:quizId/questions - list questions for a quiz
+// GET /api/quizzes/:quizId/questions - list ALL questions for a quiz (admin use)
+// Returns the full pool in stable order_index order — used by the admin QuizForm.
 router.get("/quizzes/:quizId/questions", requireAuth, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from("questions")
@@ -19,6 +20,73 @@ router.get("/quizzes/:quizId/questions", requireAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
+
+// ─── Fisher-Yates in-place shuffle ───────────────────────────────────────────
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+// GET /api/quizzes/:quizId/attempt-questions
+// Student-facing endpoint. Returns a randomly selected & shuffled subset of
+// questions based on the quiz's question_limit setting.
+//
+// Selection logic:
+//   1. Fetch the quiz row to read question_limit.
+//   2. Fetch the full question pool for that quiz.
+//   3. Shuffle the pool using Fisher-Yates.
+//   4. If question_limit is NULL or >= pool size, return the full shuffled pool.
+//   5. Otherwise slice the first question_limit items (random subset, no repeats).
+//
+// This runs server-side so students cannot inspect the full bank via the API.
+router.get(
+  "/quizzes/:quizId/attempt-questions",
+  requireAuth,
+  async (req, res) => {
+    const { quizId } = req.params;
+
+    // Fetch quiz and questions in parallel
+    const [quizRes, questionsRes] = await Promise.all([
+      supabaseAdmin
+        .from("quizzes")
+        .select("id, question_limit")
+        .eq("id", quizId)
+        .single(),
+      supabaseAdmin
+        .from("questions")
+        .select("*")
+        .eq("quiz_id", quizId)
+        .order("order_index", { ascending: true }),
+    ]);
+
+    if (quizRes.error || !quizRes.data) {
+      return res.status(404).json({ error: "Quiz not found" });
+    }
+    if (questionsRes.error) {
+      return res.status(500).json({ error: questionsRes.error.message });
+    }
+
+    const pool = questionsRes.data ?? [];
+    const limit = quizRes.data.question_limit;
+
+    // Shuffle the full pool (mutates a copy)
+    const shuffled = shuffle([...pool]);
+
+    // Apply limit only when it's a positive integer less than pool size
+    const served =
+      limit != null &&
+      Number.isInteger(limit) &&
+      limit > 0 &&
+      limit < shuffled.length
+        ? shuffled.slice(0, limit)
+        : shuffled;
+
+    res.json(served);
+  },
+);
 
 // POST /api/quizzes/:quizId/questions - add a single question (admin only)
 router.post(
