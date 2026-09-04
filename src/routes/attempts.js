@@ -80,8 +80,11 @@ router.get("/history", requireAuth, async (req, res) => {
   res.json(withPassFail);
 });
 
-// GET /api/quizzes/:quizId/leaderboard - best score per user this week, tie-broken by fastest time
+// GET /api/quizzes/:quizId/leaderboard?scope=weekly|alltime
+// Default scope is "weekly". All-time returns the same shape but without date filtering.
 router.get("/quizzes/:quizId/leaderboard", async (req, res) => {
+  const scope = req.query.scope === "alltime" ? "alltime" : "weekly";
+
   // ── Compute current week window (Monday 00:00:00 UTC → Sunday 23:59:59 UTC) ──
   const now = new Date();
   const dayOfWeek = now.getUTCDay(); // 0 = Sun, 1 = Mon … 6 = Sat
@@ -94,20 +97,25 @@ router.get("/quizzes/:quizId/leaderboard", async (req, res) => {
   const weekEnd = new Date(weekStart);
   weekEnd.setUTCDate(weekStart.getUTCDate() + 7); // exclusive upper bound (next Monday 00:00)
 
-  const { data, error } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("attempts")
     .select(
       "user_id, score, time_taken_seconds, created_at, profiles(full_name)",
     )
     .eq("quiz_id", req.params.quizId)
-    .gte("created_at", weekStart.toISOString())
-    .lt("created_at", weekEnd.toISOString())
     .order("score", { ascending: false })
     .order("time_taken_seconds", { ascending: true });
 
+  if (scope === "weekly") {
+    query = query
+      .gte("created_at", weekStart.toISOString())
+      .lt("created_at", weekEnd.toISOString());
+  }
+
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
-  // Reduce to each user's single best attempt this week (first occurrence after sort)
+  // Reduce to each user's single best attempt (first occurrence after sort)
   const bestByUser = new Map();
   for (const row of data) {
     if (!bestByUser.has(row.user_id)) {
@@ -120,6 +128,7 @@ router.get("/quizzes/:quizId/leaderboard", async (req, res) => {
   );
 
   res.json({
+    scope,
     weekStart: weekStart.toISOString(),
     weekEnd: weekEnd.toISOString(), // next Monday 00:00 UTC — use for countdown
     entries: leaderboard,
