@@ -108,11 +108,15 @@ router.get("/questions", requireAuth, async (req, res) => {
   }
 
   // Fetch quiz metadata + questions for all 4 in parallel
-  const [quizzesRes, ...questionResults] = await Promise.all([
+  const [quizzesRes, passagesRes, ...questionResults] = await Promise.all([
     supabaseAdmin
       .from("quizzes")
       .select("id, title, jamb_subject, jamb_year")
       .in("id", quizIds),
+    supabaseAdmin
+      .from("passages")
+      .select("id, title, body")
+      .in("quiz_id", quizIds),
     ...quizIds.map((id) =>
       supabaseAdmin
         .from("questions")
@@ -128,6 +132,12 @@ router.get("/questions", requireAuth, async (req, res) => {
   const quizMap = {};
   for (const q of quizzesRes.data ?? []) quizMap[q.id] = q;
 
+  // Build passage map keyed by passage id
+  const passageMap = {};
+  for (const p of passagesRes.data ?? []) {
+    passageMap[p.id] = { title: p.title, body: p.body };
+  }
+
   const keys = ["english", "subject2", "subject3", "subject4"];
   const limits = [ENGLISH_LIMIT, OTHER_LIMIT, OTHER_LIMIT, OTHER_LIMIT];
   const result = {};
@@ -139,11 +149,17 @@ router.get("/questions", requireAuth, async (req, res) => {
     const shuffled = shuffle(pool);
     const served = shuffled.slice(0, limits[i]);
 
+    // Inline passage data onto each question
+    const withPassages = served.map((q) => ({
+      ...q,
+      passage: q.passage_id ? (passageMap[q.passage_id] ?? null) : null,
+    }));
+
     result[keys[i]] = {
       quizId: id,
       subject: quiz?.jamb_subject ?? "",
       year: quiz?.jamb_year ?? null,
-      questions: served,
+      questions: withPassages,
     };
   }
 
