@@ -2,6 +2,7 @@ import { Router } from "express";
 import { supabaseAdmin } from "../lib/supabaseAdmin.js";
 import { requireAuth, requireAdmin } from "../middleware/requireAuth.js";
 import { deleteQuestionImages } from "../lib/storageCleanup.js";
+import { JAMB_SUBJECTS } from "../lib/jambSubjects.js";
 
 const router = Router();
 
@@ -85,15 +86,43 @@ router.get("/:id", async (req, res) => {
 
 // POST /api/quizzes - create quiz (admin only)
 router.post("/", requireAuth, requireAdmin, async (req, res) => {
-  const { title, description, price, duration_minutes, pass_mark } = req.body;
+  const {
+    title,
+    description,
+    price,
+    duration_minutes,
+    pass_mark,
+    is_jamb,
+    jamb_subject,
+    jamb_year,
+  } = req.body;
 
   if (!title || price == null || !duration_minutes || pass_mark == null) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
+  // Validate JAMB fields when is_jamb is true
+  if (is_jamb) {
+    if (!jamb_subject || !JAMB_SUBJECTS.includes(jamb_subject)) {
+      return res.status(400).json({ error: "Invalid or missing JAMB subject" });
+    }
+    if (!jamb_year || !/^\d{4}$/.test(String(jamb_year))) {
+      return res.status(400).json({ error: "Invalid or missing JAMB year" });
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from("quizzes")
-    .insert({ title, description, price, duration_minutes, pass_mark })
+    .insert({
+      title,
+      description,
+      price,
+      duration_minutes,
+      pass_mark,
+      is_jamb: is_jamb ?? false,
+      jamb_subject: is_jamb ? jamb_subject : null,
+      jamb_year: is_jamb ? Number(jamb_year) : null,
+    })
     .select()
     .single();
 
@@ -103,7 +132,25 @@ router.post("/", requireAuth, requireAdmin, async (req, res) => {
 
 // PATCH /api/quizzes/:id - edit quiz (admin only)
 router.patch("/:id", requireAuth, requireAdmin, async (req, res) => {
-  const updates = { ...req.body, updated_at: new Date().toISOString() };
+  const { is_jamb, jamb_subject, jamb_year, ...rest } = req.body;
+
+  // Validate JAMB fields if provided
+  if (is_jamb) {
+    if (!jamb_subject || !JAMB_SUBJECTS.includes(jamb_subject)) {
+      return res.status(400).json({ error: "Invalid or missing JAMB subject" });
+    }
+    if (!jamb_year || !/^\d{4}$/.test(String(jamb_year))) {
+      return res.status(400).json({ error: "Invalid or missing JAMB year" });
+    }
+  }
+
+  const updates = {
+    ...rest,
+    is_jamb: is_jamb ?? false,
+    jamb_subject: is_jamb ? jamb_subject : null,
+    jamb_year: is_jamb ? Number(jamb_year) : null,
+    updated_at: new Date().toISOString(),
+  };
 
   const { data, error } = await supabaseAdmin
     .from("quizzes")
